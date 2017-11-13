@@ -1,6 +1,5 @@
 import httplib2
 import os
-import time
 
 from apiclient import discovery
 from oauth2client import client
@@ -30,41 +29,58 @@ def get_credentials():
     return credentials
 
 def main():
-
-    current_millisecs = lambda: int(round(time.time() * 1000))
     
     credentials = get_credentials()
     http = credentials.authorize(httplib2.Http())
-    discoveryUrl = ('https://sheets.googleapis.com/$discovery/rest?version=v4')
-    
+    discoveryUrl = ('https://sheets.googleapis.com/$discovery/rest?version=v4')   
     service = discovery.build('sheets', 'v4', http=http, discoveryServiceUrl=discoveryUrl)    
 
-    spreadsheet_body = {
-                            'properties': {
-                                'title': 'Test Sheet ' + str(current_millisecs())
-                            }
-                        }
+    spreadsheet_id = None
 
-    request = service.spreadsheets().create(body=spreadsheet_body)
-    response = request.execute()
-    
-    spreadsheet_id = response['spreadsheetId'];
+    if os.path.isfile("sheetid.txt"):
+
+        with open("sheetid.txt") as file:
+
+            spreadsheet_id = file.read()
+
+    if spreadsheet_id == None:
+
+        spreadsheet_body = {
+            'properties': {
+                'title': 'API Testing Spreadsheet'
+            }
+        }
+
+        request = service.spreadsheets().create(body=spreadsheet_body)
+        response = request.execute()
+        
+        spreadsheet_id = response['spreadsheetId'];
+
+        with open("sheetid.txt", "w") as file:
+            file.write(spreadsheet_id)
 
     #------------------    
 
-    value = lambda x: { 
-                'userEnteredValue': {
-                    'stringValue': str(x)
-                },
-                'userEnteredFormat': {
-                    'backgroundColor': {
-                        'red': 0.7, 
-                        'green': 0.4, 
-                        'blue': 0.2, 
-                        'alpha': 1.0
-                    } 
-                }
-            }
+
+    batch_clear_values_request_body = {        
+        'ranges': ['A1:J10']
+    }
+
+    service.spreadsheets().values().batchClear(spreadsheetId=spreadsheet_id, body=batch_clear_values_request_body).execute()
+
+    value = lambda x, r, g, b: {         
+        'userEnteredValue': {
+            'stringValue': str(x)
+        },
+        'userEnteredFormat': {
+            'backgroundColor': {
+                'red': r, 
+                'green': g, 
+                'blue': b, 
+                'alpha': 1 
+            } 
+        }
+    }
 
     data = []
     for i in range(10):
@@ -73,23 +89,31 @@ def main():
             row.append(str(i) + ',' + str(j))
         data.append(row)
 
-    rows = [{'values': [value(cell) for cell in row]} for row in data]
+    rows = [{'values': [value(cell, int(cell.split(',')[0])/10, int(cell.split(',')[1])/10, 0) for cell in row]} for row in data]
     
     body = {
         'requests': [
-            {
-                'appendCells': {
-                    'sheetId': 0,
+            {            
+                'updateCells': {    
                     'rows': rows,
-                    'fields': '*',
+                    'start': {            
+                      "sheetId": 0,
+                      "rowIndex": 0,
+                      "columnIndex": 0,            
+                    },
+                    'fields': '*'
                 }
             }
-        ],
+        ]
     }
 
     service.spreadsheets().batchUpdate(spreadsheetId=spreadsheet_id, body=body).execute()
 
 
+
+
 if __name__ == '__main__':
 
     main()
+
+
